@@ -9,9 +9,7 @@ on:
         type: string
       pr_number:
         type: number
-    secrets:
-      GITHUB_TOKEN:
-        required: true
+    secrets: {}
 
 permissions:
   pull-requests:

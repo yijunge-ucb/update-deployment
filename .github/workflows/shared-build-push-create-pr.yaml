@@ -108,11 +108,28 @@ jobs:
       - name: Update the tag for any deployments that use this image
         if: ${{ env.IMAGE_TAG }}
         run: |
-          for deployment in $(find deployments -type f -name common.yaml -exec grep -l "${IMAGE}" {} +); do
-            old_hash=$(grep -hA1 ${IMAGE} ${deployment} | grep tag | awk -F ': ' '{print $2}')
-            new_hash=${IMAGE_TAG}
-            sed -i -e "s,${old_hash},${new_hash},g" ${deployment}
-            echo "Updated ${deployment} with new image tag ${new_hash}"
+          for deployment in $(grep -lr "${IMAGE}" deployments/); do
+            echo "Processing $deployment..."
+          
+            # ---- Inline image update: image: repo/name:tag ----
+            grep "${IMAGE}:" "$deployment" | while read -r line; do
+              # Extract the tag (no space after colon)
+              old_tag=$(echo "$line" | sed -E 's/.*:\s*(.*)/\1/')
+              echo "  Updating inline tag from $old_tag to ${IMAGE_TAG}"
+              sed -i -e "s,${IMAGE}:${old_tag},${IMAGE}:${IMAGE_TAG},g" "$deployment"
+              echo "  Updated inline image tag: ${old_tag} -> ${IMAGE_TAG}"
+            done
+          
+            # ---- JupyterHub-style image tag update: image and tag fields ---
+            old_hash=$(grep -hA1 "${IMAGE}" "$deployment" | grep "tag" | awk -F ': ' '{print $2}')
+            
+            # Only update if we found the old hash (i.e., tag)
+            if [[ -n "$old_hash" ]]; then
+              new_hash=${IMAGE_TAG}
+              echo "  Updating JupyterHub-style tag from $old_hash to ${new_hash}"
+              sed -i -e "s,${old_hash},${new_hash},g" "$deployment"
+              echo "  Updated JupyterHub-style tag: ${old_hash} -> ${new_hash}"
+            fi
           done
   
       - name: Create feature branch, add, commit, push changes and open a pull request

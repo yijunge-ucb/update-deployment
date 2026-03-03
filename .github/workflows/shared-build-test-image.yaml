@@ -20,7 +20,13 @@ jobs:
           sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc
           df -h
 
+      - name: Build and test with native Docker (base-*-image repos)
+        if: startsWith(github.event.repository.name, 'base-') && endsWith(github.event.repository.name, '-image')
+        run: |
+          docker build -t test-image .
+          
       - name: Build and test the image if any image file(s) changed
+        if: ${{ !(startsWith(github.event.repository.name, 'base-') && endsWith(github.event.repository.name, '-image')) }}
         uses: jupyterhub/repo2docker-action@master
         with:
           FORCE_REPO2DOCKER_VERSION: jupyter-repo2docker==2024.07.0

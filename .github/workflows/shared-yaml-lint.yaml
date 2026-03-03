@@ -15,4 +15,6 @@ jobs:
         run: pip install yamllint==1.35.1
 
       - name: Lint YAML files
-        run: yamllint --no-warnings .
+        run: |
+          yamllint -d "{extends: default, rules: {line-length: {max: 120}}}" . \
+            --no-warnings

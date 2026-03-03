@@ -7,7 +7,7 @@ on:
         required: true
       hub:
         type: string
-        required: true
+        required: false
       app_id:
         type: string
         required: true

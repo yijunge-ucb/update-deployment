@@ -2,8 +2,13 @@ name: Build and Test Container Image
 
 on:
   workflow_call:
-    inputs: {}
-    secrets: {}
+    inputs:
+      image:
+          type: string
+          required: true
+    secrets:
+      GAR_SECRET_KEY:
+        required: true
 
 jobs:
   test-build:
@@ -19,13 +24,28 @@ jobs:
         run: |
           sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc
           df -h
+ 
+      - name: Log in to GAR
+        uses: docker/login-action@v3
+        with:
+          registry: us-central1-docker.pkg.dev
+          username: _json_key
+          password: ${{ secrets.GAR_SECRET_KEY }}
+
+      - name: Build and test with native Docker (base-*-image repos)
+        if: startsWith(github.event.repository.name, 'base-') && endsWith(github.event.repository.name, '-image')
+        run: |
+          docker build -t test-image .
 
       - name: Build and test the image if any image file(s) changed
+        if: ${{ !(startsWith(github.event.repository.name, 'base-') && endsWith(github.event.repository.name, '-image')) }}
         uses: jupyterhub/repo2docker-action@master
         with:
           FORCE_REPO2DOCKER_VERSION: jupyter-repo2docker==2024.07.0
           REPO_DIR: /srv/repo
           NO_PUSH: true
+          DOCKER_REGISTRY: us-central1-docker.pkg.dev
+          IMAGE_NAME: ${{ inputs.image }}
 
       # Lets us monitor disks getting full as images get bigger over time
       - name: Show how much disk space is left

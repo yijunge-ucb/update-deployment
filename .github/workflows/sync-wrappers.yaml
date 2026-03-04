@@ -1,0 +1,105 @@
+name: Sync CI Wrappers
+
+on:
+  push:
+    paths:
+      - wrappers/**
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate GitHub App Token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.APP_ID }}
+          private-key: ${{ secrets.PRIVATE_KEY_SECRET }}
+          owner: ${{ github.repository_owner }}
+
+      - name: Set git identity
+        run: |
+          git config --global user.email "${{ vars.IMAGE_BUILDER_BOT_EMAIL }}"
+          git config --global user.name "${{ vars.IMAGE_BUILDER_BOT_NAME }}"
+
+      - name: Sync wrapper
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          MERGE_PR: false
+        run: |
+          while read repo; do
+            echo "Updating $repo"
+
+            gh repo clone ${{ github.repository_owner }}/$repo
+
+            mkdir -p $repo/.github/workflows
+            cp -r wrappers/* $repo/.github/workflows/
+
+            cd $repo
+
+            BRANCH="update-ci-wrapper"
+
+            CHANGED_FILES=$(git status --porcelain -uno | awk '{print $2}')
+            if [ -z "$CHANGED_FILES" ]; then
+              echo "No changes detected for $repo. Skipping PR creation."
+              cd ..
+              continue
+            fi
+
+            # Check if PR already exists
+            EXISTING_PR=$(gh pr list --head "$BRANCH" --json number --jq '.[0].number // empty')
+
+            git checkout -B "$BRANCH"
+            for file in $CHANGED_FILES; do
+              git add "$file"
+            done
+
+            COMMIT_MESSAGE="Sync CI wrapper updates to $repo"
+            git commit -m "$COMMIT_MESSAGE" || echo "No commit created"
+
+            git push origin "$BRANCH" --force
+
+            if [ -n "$EXISTING_PR" ]; then
+              echo "Updating existing PR #$EXISTING_PR"
+              gh pr edit "$EXISTING_PR" \
+                --title "$COMMIT_MESSAGE" \
+                --body "Updated files: $CHANGED_FILES"
+            else
+              echo "Creating new PR"
+              gh pr create \
+                --title "$COMMIT_MESSAGE" \
+                --body "Updated files: $CHANGED_FILES" \
+                --head "$BRANCH" \
+                --base main
+            fi
+
+
+            if [ "$MERGE_PR" = "true" ]; then
+              echo "Waiting for checks to pass for PR #$PR_NUMBER"
+
+              # Poll checks until all complete and successful
+              while true; do
+                ALL_CHECKS_PASSED=$(gh pr checks "$PR_NUMBER" --json conclusion --jq 'map(.conclusion) | all(. == "success")')
+                PENDING_CHECKS=$(gh pr checks "$PR_NUMBER" --json status --jq 'map(.status) | any(. != "completed")')
+                
+                if [ "$PENDING_CHECKS" = "true" ]; then
+                  echo "Checks still running, sleeping 30s..."
+                  sleep 30
+                elif [ "$ALL_CHECKS_PASSED" = "true" ]; then
+                  echo "All checks passed, merging PR #$PR_NUMBER"
+                  gh pr merge "$PR_NUMBER" --merge --admin
+                  echo "Deleting branch $BRANCH in $repo"
+                  gh api -X DELETE repos/${{ github.repository_owner }}/$repo/git/refs/heads/$BRANCH
+                  break
+                else
+                  echo "Some checks failed on PR #$PR_NUMBER, skipping merge."
+                  break
+                fi
+              done
+            fi
+
+            cd ..
+          done < repos.txt

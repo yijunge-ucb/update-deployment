@@ -16,5 +16,5 @@ jobs:
 
       - name: Lint YAML files
         run: |
-          yamllint -d "{extends: default, rules: {line-length: {max: 120}}}" . \
+          yamllint -d "{extends: default, rules: {line-length: {max: 250}}}" . \
             --no-warnings

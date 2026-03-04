@@ -2,7 +2,10 @@ name: Build and Test Container Image
 
 on:
   workflow_call:
-    inputs: {}
+    inputs:
+      image:
+          type: string
+          required: true
     secrets:
       GAR_SECRET_KEY:
         required: true
@@ -41,6 +44,8 @@ jobs:
           FORCE_REPO2DOCKER_VERSION: jupyter-repo2docker==2024.07.0
           REPO_DIR: /srv/repo
           NO_PUSH: true
+          DOCKER_REGISTRY: us-central1-docker.pkg.dev
+          IMAGE_NAME: ${{ inputs.image }}
 
       # Lets us monitor disks getting full as images get bigger over time
       - name: Show how much disk space is left
